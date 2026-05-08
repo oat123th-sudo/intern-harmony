@@ -3,15 +3,11 @@ import { Card } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Users, UserCheck, TrendingUp, GraduationCap } from "lucide-react";
-import { useStore, type Role } from "@/lib/store";
-import { toast } from "sonner";
+import { Users, UserCheck, TrendingUp, GraduationCap } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getUsersFn, getInternProgressFn } from "@/api/users";
+import { InternTrackerTable } from "@/components/InternTrackerTable";
 
 export const Route = createFileRoute("/_dash/admin")({
   head: () => ({ meta: [{ title: "Admin Dashboard — InternHub" }] }),
@@ -36,16 +32,13 @@ function StatCard({ title, value, hint, icon: Icon, accent }: any) {
 }
 
 function AdminDashboard() {
-  const { users, setUsers } = useStore();
+  const { data: users = [] } = useQuery({ queryKey: ["users"], queryFn: () => getUsersFn() });
+  const { data: internProgress = [] } = useQuery({ queryKey: ["internProgress"], queryFn: () => getInternProgressFn() });
+
   const total = users.filter((u) => u.role === "intern").length;
   const accepted = users.filter((u) => u.role === "intern" && u.status === "Accepted").length;
   const active = users.filter((u) => u.role === "intern" && u.status === "Active").length;
   const completion = total ? Math.round(((accepted + active) / total) * 100) : 0;
-
-  const changeRole = (id: string, role: Role) => {
-    setUsers(users.map((u) => (u.id === id ? { ...u, role } : u)));
-    toast.success(`Role updated to ${role}`);
-  };
 
   return (
     <div className="space-y-6">
@@ -64,54 +57,11 @@ function AdminDashboard() {
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b p-4">
           <div>
-            <h2 className="text-base font-semibold">Users</h2>
-            <p className="text-xs text-muted-foreground">Manage roles and access across the platform.</p>
+            <h2 className="text-base font-semibold">Intern Tracking</h2>
+            <p className="text-xs text-muted-foreground">Monitor tasks, progress, and deadlines for all interns.</p>
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-12 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-medium">{u.name}</TableCell>
-                <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="capitalize">{u.role}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    className="capitalize"
-                    variant={u.status === "Accepted" || u.status === "Active" ? "default" : u.status === "Rejected" ? "destructive" : "outline"}
-                  >
-                    {u.status ?? "—"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Change role</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => changeRole(u.id, "admin")}>Admin</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => changeRole(u.id, "mentor")}>Mentor</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => changeRole(u.id, "intern")}>Intern</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <InternTrackerTable interns={internProgress} />
       </Card>
     </div>
   );

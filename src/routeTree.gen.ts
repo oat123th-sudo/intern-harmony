@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashRouteImport } from './routes/_dash'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashMentorRouteImport } from './routes/_dash/mentor'
+import { Route as DashManageUsersRouteImport } from './routes/_dash/manage-users'
 import { Route as DashInternRouteImport } from './routes/_dash/intern'
 import { Route as DashAdminRouteImport } from './routes/_dash/admin'
 
@@ -41,6 +42,11 @@ const DashMentorRoute = DashMentorRouteImport.update({
   path: '/mentor',
   getParentRoute: () => DashRoute,
 } as any)
+const DashManageUsersRoute = DashManageUsersRouteImport.update({
+  id: '/manage-users',
+  path: '/manage-users',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashInternRoute = DashInternRouteImport.update({
   id: '/intern',
   path: '/intern',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/admin': typeof DashAdminRoute
   '/intern': typeof DashInternRoute
+  '/manage-users': typeof DashManageUsersRoute
   '/mentor': typeof DashMentorRoute
 }
 export interface FileRoutesByTo {
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/admin': typeof DashAdminRoute
   '/intern': typeof DashInternRoute
+  '/manage-users': typeof DashManageUsersRoute
   '/mentor': typeof DashMentorRoute
 }
 export interface FileRoutesById {
@@ -76,13 +84,28 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_dash/admin': typeof DashAdminRoute
   '/_dash/intern': typeof DashInternRoute
+  '/_dash/manage-users': typeof DashManageUsersRoute
   '/_dash/mentor': typeof DashMentorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/admin' | '/intern' | '/mentor'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/admin'
+    | '/intern'
+    | '/manage-users'
+    | '/mentor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/admin' | '/intern' | '/mentor'
+  to:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/admin'
+    | '/intern'
+    | '/manage-users'
+    | '/mentor'
   id:
     | '__root__'
     | '/'
@@ -91,6 +114,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_dash/admin'
     | '/_dash/intern'
+    | '/_dash/manage-users'
     | '/_dash/mentor'
   fileRoutesById: FileRoutesById
 }
@@ -138,6 +162,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashMentorRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/manage-users': {
+      id: '/_dash/manage-users'
+      path: '/manage-users'
+      fullPath: '/manage-users'
+      preLoaderRoute: typeof DashManageUsersRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/intern': {
       id: '/_dash/intern'
       path: '/intern'
@@ -158,12 +189,14 @@ declare module '@tanstack/react-router' {
 interface DashRouteChildren {
   DashAdminRoute: typeof DashAdminRoute
   DashInternRoute: typeof DashInternRoute
+  DashManageUsersRoute: typeof DashManageUsersRoute
   DashMentorRoute: typeof DashMentorRoute
 }
 
 const DashRouteChildren: DashRouteChildren = {
   DashAdminRoute: DashAdminRoute,
   DashInternRoute: DashInternRoute,
+  DashManageUsersRoute: DashManageUsersRoute,
   DashMentorRoute: DashMentorRoute,
 }
 
