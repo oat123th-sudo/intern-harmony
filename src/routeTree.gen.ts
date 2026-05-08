@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashRouteImport } from './routes/_dash'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashMentorRouteImport } from './routes/_dash/mentor'
+import { Route as DashInternRouteImport } from './routes/_dash/intern'
 import { Route as DashAdminRouteImport } from './routes/_dash/admin'
 
 const SignupRoute = SignupRouteImport.update({
@@ -40,6 +41,11 @@ const DashMentorRoute = DashMentorRouteImport.update({
   path: '/mentor',
   getParentRoute: () => DashRoute,
 } as any)
+const DashInternRoute = DashInternRouteImport.update({
+  id: '/intern',
+  path: '/intern',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashAdminRoute = DashAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/admin': typeof DashAdminRoute
+  '/intern': typeof DashInternRoute
   '/mentor': typeof DashMentorRoute
 }
 export interface FileRoutesByTo {
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/admin': typeof DashAdminRoute
+  '/intern': typeof DashInternRoute
   '/mentor': typeof DashMentorRoute
 }
 export interface FileRoutesById {
@@ -67,13 +75,14 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_dash/admin': typeof DashAdminRoute
+  '/_dash/intern': typeof DashInternRoute
   '/_dash/mentor': typeof DashMentorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/admin' | '/mentor'
+  fullPaths: '/' | '/login' | '/signup' | '/admin' | '/intern' | '/mentor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/admin' | '/mentor'
+  to: '/' | '/login' | '/signup' | '/admin' | '/intern' | '/mentor'
   id:
     | '__root__'
     | '/'
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_dash/admin'
+    | '/_dash/intern'
     | '/_dash/mentor'
   fileRoutesById: FileRoutesById
 }
@@ -128,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashMentorRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/intern': {
+      id: '/_dash/intern'
+      path: '/intern'
+      fullPath: '/intern'
+      preLoaderRoute: typeof DashInternRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/admin': {
       id: '/_dash/admin'
       path: '/admin'
@@ -140,11 +157,13 @@ declare module '@tanstack/react-router' {
 
 interface DashRouteChildren {
   DashAdminRoute: typeof DashAdminRoute
+  DashInternRoute: typeof DashInternRoute
   DashMentorRoute: typeof DashMentorRoute
 }
 
 const DashRouteChildren: DashRouteChildren = {
   DashAdminRoute: DashAdminRoute,
+  DashInternRoute: DashInternRoute,
   DashMentorRoute: DashMentorRoute,
 }
 
