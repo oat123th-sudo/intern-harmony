@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { GraduationCap, UploadCloud, FileText, X } from "lucide-react";
+import { GraduationCap, CloudUpload, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,7 +95,7 @@ function SignupPage() {
                   </div>
                 ) : (
                   <>
-                    <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                    <CloudUpload className="h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm font-medium">Drop your resume here, or <span className="text-primary">browse</span></p>
                     <p className="text-xs text-muted-foreground">PDF or DOCX, up to 10MB</p>
                   </>
