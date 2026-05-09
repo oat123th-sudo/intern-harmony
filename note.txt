@@ -1,0 +1,16 @@
+{
+  "_id": {
+    "$oid": "69ff23bbfcc2dd1a7c0e2dfe"
+  },
+  "name": "Kirakorn Vitayawatanakul",
+  "email": "oat123th@gmail.com",
+  "password": "$2b$12$4v5AJJKzBRzmY8JDZscDSOMaJWqQROusOxl7fHDJQDbfDtvwt49D2",
+  "role": "admin",
+  "status": "Active",
+  "createdAt": {
+    "$date": "2026-05-09T12:08:27.589Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-09T19:11:00.000Z"
+  }
+}

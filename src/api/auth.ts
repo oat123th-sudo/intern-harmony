@@ -1,3 +1,4 @@
+"use server";
 import { createServerFn } from "@tanstack/react-start";
 import connectDB from "@/lib/db";
 import bcrypt from "bcryptjs";
@@ -8,23 +9,25 @@ import { z } from "zod";
 export const UserRoleSchema = z.enum(["admin", "mentor", "intern", "alumni"]);
 export const UserStatusSchema = z.enum(["Pending", "Accepted", "Rejected", "Active"]);
 
-const UserDocSchema = z.object({
-  _id: z.instanceof(ObjectId).optional(),
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: UserRoleSchema,
-  status: UserStatusSchema,
-  phoneNumber: z.string().optional(),
-  lineId: z.string().optional(),
-  facebook: z.string().optional(),
-  instagram: z.string().optional(),
-  resumeUrl: z.string().optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
 
-type UserDoc = z.infer<typeof UserDocSchema>;
+export type UserDoc = {
+  _id?: ObjectId;
+  name: string;
+  email: string;
+  password?: string;
+  role: z.infer<typeof UserRoleSchema>;
+  status: z.infer<typeof UserStatusSchema>;
+  phoneNumber?: string;
+  lineId?: string;
+  facebook?: string;
+  instagram?: string;
+  resumeUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// ─── Hardcoded admin email (single source of truth) ──────────────────────────
+const ADMIN_EMAIL = "admin@gmail.com";
 
 async function users() {
   const db = await connectDB();
@@ -33,34 +36,42 @@ async function users() {
 
 // ─── Signup ───────────────────────────────────────────────────────────────────
 const SignupSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  email: z.string().email("Invalid email address").max(254),
+  password: z
+    .string()
+    .min(6, "Password must be at least 6 characters")
+    .max(128),
 });
 
 export const signupFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => SignupSchema.parse(data))
   .handler(async ({ data }) => {
+    const col = await users();
+    const normEmail = data.email.toLowerCase().trim();
+
+    // Check duplicate (unique index also guards this, but gives a cleaner message)
+    const existing = await col.findOne(
+      { email: normEmail },
+      { projection: { _id: 1 } }
+    );
+    if (existing) throw new Error("Email is already in use");
+
+    const hashedPassword = await bcrypt.hash(data.password, 12); // 12 rounds
+    const now = new Date();
+    const isAdmin = normEmail === ADMIN_EMAIL;
+
+    const doc: UserDoc = {
+      name: data.name.trim(),
+      email: normEmail,
+      password: hashedPassword,
+      role: isAdmin ? "admin" : "intern",
+      status: isAdmin ? "Active" : "Pending",
+      createdAt: now,
+      updatedAt: now,
+    };
+
     try {
-      const col = await users();
-      
-      // Check if user exists (already indexed for performance)
-      const existing = await col.findOne({ email: data.email }, { projection: { _id: 1 } });
-      if (existing) throw new Error("Email is already in use");
-
-      const hashedPassword = await bcrypt.hash(data.password, 10);
-      const now = new Date();
-      
-      const doc: UserDoc = {
-        name: data.name,
-        email: data.email.toLowerCase(),
-        password: hashedPassword,
-        role: data.email.toLowerCase() === "admin@gmail.com" ? "admin" : "intern",
-        status: data.email.toLowerCase() === "admin@gmail.com" ? "Active" : "Pending",
-        createdAt: now,
-        updatedAt: now,
-      };
-
       const result = await col.insertOne(doc);
       return {
         id: result.insertedId.toString(),
@@ -69,137 +80,131 @@ export const signupFn = createServerFn({ method: "POST" })
         role: doc.role,
         status: doc.status,
       };
-    } catch (error: any) {
-      console.error("Signup error:", error);
-      throw new Error(error.message || "Failed to create account. Please try again.");
+    } catch (err: any) {
+      // MongoDB duplicate-key error code 11000
+      if (err?.code === 11000) throw new Error("Email is already in use");
+      console.error("Signup DB error:", err);
+      throw new Error("Failed to create account. Please try again.");
     }
   });
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 const LoginSchema = z.object({
   email: z.string().email(),
-  password: z.string(),
+  password: z.string().min(1, "Password is required"),
 });
 
 export const loginFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => LoginSchema.parse(data))
   .handler(async ({ data }) => {
-    try {
-      const col = await users();
-      const user = await col.findOne({ email: data.email.toLowerCase() });
-      if (!user) throw new Error("Invalid email or password");
+    const col = await users();
+    const normEmail = data.email.toLowerCase().trim();
+    const user = await col.findOne({ email: normEmail });
 
-      const isMatch = await bcrypt.compare(data.password, user.password);
-      if (!isMatch) throw new Error("Invalid email or password");
+    // Use a constant-time comparison path to prevent timing attacks
+    const placeholder = "$2a$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const isMatch = user
+      ? await bcrypt.compare(data.password, user.password)
+      : await bcrypt.compare(data.password, placeholder); // dummy compare
 
-      // Auto-promote admin email if needed
-      if (user.email === "admin@gmail.com" && user.role !== "admin") {
-        await col.updateOne(
-          { _id: user._id },
-          { $set: { role: "admin", status: "Active", updatedAt: new Date() } }
-        );
-        user.role = "admin";
-        user.status = "Active";
-      }
+    if (!user || !isMatch) throw new Error("Invalid email or password");
 
-      return {
-        id: user._id!.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      };
-    } catch (error: any) {
-      console.error("Login error:", error);
-      throw new Error(error.message || "Login failed. Check your credentials.");
+    // Auto-promote admin email if role was somehow downgraded
+    if (normEmail === ADMIN_EMAIL && user.role !== "admin") {
+      await col.updateOne(
+        { _id: user._id },
+        { $set: { role: "admin", status: "Active", updatedAt: new Date() } }
+      );
+      user.role = "admin";
+      user.status = "Active";
     }
+
+    return {
+      id: user._id!.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    };
   });
 
 // ─── Get Current User ─────────────────────────────────────────────────────────
 export const getCurrentUserFn = createServerFn({ method: "GET" })
-  .inputValidator((userId: unknown) => z.string().parse(userId))
+  .inputValidator((userId: unknown) => z.string().min(1).parse(userId))
   .handler(async ({ data: userId }) => {
-    try {
-      if (!userId) return null;
-      const col = await users();
-      let oid: ObjectId;
-      try { oid = new ObjectId(userId); } catch { return null; }
-      
-      const user = await col.findOne(
-        { _id: oid },
-        { projection: { password: 0 } } // NEVER return password
-      );
-      
-      if (!user) return null;
-      return {
-        id: user._id!.toString(),
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        phoneNumber: user.phoneNumber,
-        lineId: user.lineId,
-        facebook: user.facebook,
-        instagram: user.instagram,
-        resumeUrl: user.resumeUrl,
-      };
-    } catch (error) {
-      console.error("GetCurrentUser error:", error);
-      return null;
-    }
+    if (!ObjectId.isValid(userId)) return null;
+
+    const col = await users();
+    const oid = new ObjectId(userId);
+
+    const user = await col.findOne(
+      { _id: oid },
+      { projection: { password: 0 } } // NEVER return password
+    );
+
+    if (!user) return null;
+    return {
+      id: user._id!.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      phoneNumber: user.phoneNumber,
+      lineId: user.lineId,
+      facebook: user.facebook,
+      instagram: user.instagram,
+      resumeUrl: user.resumeUrl,
+    };
   });
 
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const UpdateProfileSchema = z.object({
-  id: z.string(),
-  name: z.string().min(2),
-  phoneNumber: z.string().optional(),
-  lineId: z.string().optional(),
-  facebook: z.string().optional(),
-  instagram: z.string().optional(),
-  resumeUrl: z.string().optional(),
+  id: z.string().min(1),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  phoneNumber: z.string().max(20).optional(),
+  lineId: z.string().max(50).optional(),
+  facebook: z.string().max(200).optional(),
+  instagram: z.string().max(100).optional(),
+  resumeUrl: z.string().url("Resume URL must be a valid URL").max(500).optional().or(z.literal("")),
 });
 
 export const updateProfileFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => UpdateProfileSchema.parse(data))
   .handler(async ({ data }) => {
-    try {
-      const col = await users();
-      let oid: ObjectId;
-      try { oid = new ObjectId(data.id); } catch { throw new Error("Invalid user ID"); }
+    if (!ObjectId.isValid(data.id)) throw new Error("Invalid user ID");
 
-      const updateData: Partial<UserDoc> = {
-        name: data.name,
-        phoneNumber: data.phoneNumber,
-        lineId: data.lineId,
-        facebook: data.facebook,
-        instagram: data.instagram,
-        resumeUrl: data.resumeUrl,
-        updatedAt: new Date(),
-      };
+    const col = await users();
+    const oid = new ObjectId(data.id);
 
-      const result = await col.findOneAndUpdate(
-        { _id: oid },
-        { $set: updateData },
-        { returnDocument: "after", projection: { password: 0 } }
-      );
+    // Strip empty strings → undefined so they're omitted from DB
+    const updateData: Partial<UserDoc> = {
+      name: data.name.trim(),
+      phoneNumber: data.phoneNumber || undefined,
+      lineId: data.lineId || undefined,
+      facebook: data.facebook || undefined,
+      instagram: data.instagram || undefined,
+      resumeUrl: data.resumeUrl || undefined,
+      updatedAt: new Date(),
+    };
 
-      if (!result) throw new Error("User not found");
-      
-      return {
-        id: result._id!.toString(),
-        name: result.name,
-        email: result.email,
-        role: result.role,
-        status: result.status,
-        phoneNumber: result.phoneNumber,
-        lineId: result.lineId,
-        facebook: result.facebook,
-        instagram: result.instagram,
-        resumeUrl: result.resumeUrl,
-      };
-    } catch (error: any) {
-      console.error("UpdateProfile error:", error);
-      throw new Error(error.message || "Failed to update profile.");
-    }
+    const result = await col.findOneAndUpdate(
+      { _id: oid },
+      { $set: updateData },
+      { returnDocument: "after", projection: { password: 0 } }
+    );
+
+    if (!result) throw new Error("User not found");
+
+    return {
+      id: result._id!.toString(),
+      name: result.name,
+      email: result.email,
+      role: result.role,
+      status: result.status,
+      phoneNumber: result.phoneNumber,
+      lineId: result.lineId,
+      facebook: result.facebook,
+      instagram: result.instagram,
+      resumeUrl: result.resumeUrl,
+    };
   });

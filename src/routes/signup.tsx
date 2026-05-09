@@ -70,12 +70,27 @@ function SignupPage() {
               <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
             </div>
 
-            <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
-              <Checkbox id="pdpa" checked={pdpa} onCheckedChange={(v) => setPdpa(Boolean(v))} className="mt-0.5" />
-              <Label htmlFor="pdpa" className="text-sm font-normal leading-snug">
+            <div 
+              className="flex items-start gap-4 rounded-2xl border border-border/50 bg-white/40 p-5 cursor-pointer hover:bg-white/60 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 select-none group active:scale-[0.99] backdrop-blur-sm"
+              onClick={() => setPdpa(!pdpa)}
+            >
+              <div className="flex items-center justify-center pt-0.5">
+                <Checkbox 
+                  id="pdpa" 
+                  checked={pdpa} 
+                  onCheckedChange={(v) => setPdpa(v === true)} 
+                  className="transition-all duration-300 group-hover:scale-110 group-active:scale-90"
+                  onClick={(e) => e.stopPropagation()} 
+                />
+              </div>
+              <Label 
+                htmlFor="pdpa" 
+                className="text-sm font-normal leading-relaxed cursor-pointer flex-1 text-muted-foreground group-hover:text-foreground transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
                 I consent to the collection and processing of my personal data in accordance with the
                 <span className="font-medium text-foreground"> PDPA (Personal Data Protection Act)</span> for the
-                purpose of evaluating my internship application. <span className="text-destructive">*</span>
+                purpose of evaluating my internship application. <span className="text-destructive font-bold">*</span>
               </Label>
             </div>
 
