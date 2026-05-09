@@ -24,10 +24,10 @@ export const Route = createFileRoute("/_dash/intern")({
 
 type TaskData = { id: string; title: string; detail?: string; status: "todo" | "doing" | "done"; deadline: string; timeOfDay: string; createdAt: string; };
 
-const COLUMNS: { key: TaskData["status"]; label: string; tone: string }[] = [
-  { key: "todo", label: "To-do", tone: "bg-muted text-muted-foreground" },
-  { key: "doing", label: "Doing", tone: "bg-primary/10 text-primary" },
-  { key: "done", label: "Done", tone: "bg-success/15 text-success" },
+const COLUMNS: { key: TaskData["status"]; label: string; dot: string; bar: string }[] = [
+  { key: "todo", label: "To-do", dot: "bg-slate-400", bar: "from-slate-300 to-slate-200" },
+  { key: "doing", label: "In progress", dot: "bg-primary", bar: "from-primary to-primary-glow" },
+  { key: "done", label: "Done", dot: "bg-emerald-500", bar: "from-emerald-400 to-emerald-300" },
 ];
 
 function TaskCard({ task, move }: { task: TaskData; move: (id: string, status: TaskData["status"]) => void }) {
@@ -35,15 +35,15 @@ function TaskCard({ task, move }: { task: TaskData; move: (id: string, status: T
   const isOverdue = task.status !== "done" && new Date(task.deadline) < new Date();
 
   return (
-    <div className="rounded-lg border bg-background p-3 shadow-[var(--shadow-soft)]">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium">{task.title}</p>
-          <p className={`text-xs mt-1 ${isOverdue ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-            Deadline: {new Date(task.deadline).toLocaleDateString()}
+    <div className="hover-lift group rounded-xl border border-border/60 bg-card p-3.5 shadow-[var(--shadow-soft)]">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-snug">{task.title}</p>
+          <p className={`mt-1.5 text-[11px] ${isOverdue ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
+            {isOverdue ? "⚠ Overdue · " : ""}Due {new Date(task.deadline).toLocaleDateString()}
           </p>
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 -mt-1" onClick={() => setExpanded(!expanded)}>
+        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" onClick={() => setExpanded(!expanded)}>
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </Button>
       </div>
@@ -56,12 +56,12 @@ function TaskCard({ task, move }: { task: TaskData; move: (id: string, status: T
         </div>
       )}
       <Select value={task.status} onValueChange={(v) => move(task.id, v as TaskData["status"])}>
-        <SelectTrigger className="mt-2 h-8 text-xs">
+        <SelectTrigger className="mt-3 h-8 rounded-lg border-border/60 bg-secondary/50 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="todo">To-do</SelectItem>
-          <SelectItem value="doing">Doing</SelectItem>
+          <SelectItem value="doing">In progress</SelectItem>
           <SelectItem value="done">Done</SelectItem>
         </SelectContent>
       </Select>
@@ -123,17 +123,17 @@ function InternDashboard() {
   const move = (id: string, status: TaskData["status"]) => updateMutation.mutate({ id, status });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome back, {currentUser?.name?.split(" ")[0] ?? "Intern"} 👋
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Welcome back, <span className="text-gradient-primary">{currentUser?.name?.split(" ")[0] ?? "Intern"}</span> 👋
           </h1>
-          <p className="text-sm text-muted-foreground">Here's a quick look at your internship progress.</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">Here's a quick look at your internship progress.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4" /> Add task</Button>
+            <Button className="btn-gradient h-10 rounded-full px-5 font-medium"><Plus className="h-4 w-4" /> Add task</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>New task</DialogTitle></DialogHeader>
@@ -147,62 +147,70 @@ function InternDashboard() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={addTask}>Add</Button>
+              <Button onClick={addTask} className="btn-gradient">Add</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="col-span-2 p-6">
+      <div className="grid gap-5 md:grid-cols-3">
+        <Card className="hover-lift col-span-2 overflow-hidden border-border/60 bg-[image:var(--gradient-card)] p-6 shadow-[var(--shadow-soft)] backdrop-blur">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Project completion</p>
-              <p className="mt-1 text-3xl font-semibold">{progress}%</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Project completion</p>
+              <p className="mt-2 text-4xl font-semibold tracking-tight">{progress}<span className="text-2xl text-muted-foreground">%</span></p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[image:var(--gradient-primary)] text-primary-foreground shadow-[var(--shadow-glow)]">
               <Trophy className="h-6 w-6" />
             </div>
           </div>
-          <Progress value={progress} className="mt-4 h-2" />
+          <Progress value={progress} className="mt-5 h-2" />
           <p className="mt-2 text-xs text-muted-foreground">{done} of {total} tasks complete</p>
         </Card>
-        <Card className="flex flex-col justify-between bg-[image:var(--gradient-primary)] p-6 text-primary-foreground">
-          <div>
-            <div className="flex items-center gap-2 text-sm opacity-90">
-              <MessageSquare className="h-4 w-4" /> Community
+        <Card className="hover-lift relative flex flex-col justify-between overflow-hidden border-0 bg-[image:var(--gradient-primary)] p-6 text-primary-foreground shadow-[var(--shadow-glow)]">
+          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-16 -left-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider opacity-90">
+              <MessageSquare className="h-3.5 w-3.5" /> Community
             </div>
             <h3 className="mt-2 text-lg font-semibold leading-snug">Join the official Line group</h3>
             <p className="mt-1 text-sm opacity-90">Get updates, ask questions, and find job opportunities.</p>
           </div>
-          <Button asChild variant="secondary" className="mt-4 w-fit">
+          <Button asChild variant="secondary" className="relative mt-4 w-fit rounded-full bg-white text-primary hover:bg-white/90">
             <a href="https://line.me/R/ti/g/" target="_blank" rel="noreferrer">
-              Join Official Line Group <ExternalLink className="h-4 w-4" />
+              Join Line Group <ExternalLink className="h-4 w-4" />
             </a>
           </Button>
         </Card>
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold">Project Tracker</h2>
-        <p className="text-sm text-muted-foreground">Drag through stages — or use the dropdown to update status.</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="flex items-end justify-between">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight">Project Tracker</h2>
+            <p className="text-sm text-muted-foreground">Move tasks across stages as you progress.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-5 md:grid-cols-3">
           {COLUMNS.map((col) => {
             const items = tasks.filter((t: any) => t.status === col.key);
             return (
-              <div key={col.key} className="rounded-xl border bg-card p-4">
+              <div key={col.key} className="rounded-2xl border border-border/60 bg-[image:var(--gradient-card)] p-4 shadow-[var(--shadow-soft)] backdrop-blur">
+                <div className={`mb-3 h-1 rounded-full bg-gradient-to-r ${col.bar}`} />
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${col.tone}`}>{col.label}</span>
-                    <span className="text-xs text-muted-foreground">{items.length}</span>
+                    <span className={`h-2 w-2 rounded-full ${col.dot}`} />
+                    <span className="text-sm font-semibold">{col.label}</span>
+                    <span className="rounded-full bg-secondary px-1.5 text-[11px] font-medium text-muted-foreground">{items.length}</span>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {items.map((t: any) => (
                     <TaskCard key={t.id} task={t} move={move} />
                   ))}
                   {items.length === 0 && (
-                    <p className="rounded-lg border border-dashed py-6 text-center text-xs text-muted-foreground">No tasks</p>
+                    <p className="rounded-xl border border-dashed border-border/60 py-8 text-center text-xs text-muted-foreground">No tasks here yet</p>
                   )}
                 </div>
               </div>

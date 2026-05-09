@@ -43,28 +43,28 @@ function MentorDashboard() {
   const decide = (id: string, accept: boolean) => decideMutation.mutate({ id, accept });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Mentor Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Review applicants and track your team's progress.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">Mentor <span className="text-gradient-primary">Dashboard</span></h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">Review applicants and track your team's progress.</p>
       </div>
 
       <Tabs defaultValue="applicants">
-        <TabsList>
-          <TabsTrigger value="applicants">Applicants</TabsTrigger>
-          <TabsTrigger value="team">My Team</TabsTrigger>
+        <TabsList className="rounded-full bg-secondary/70 p-1">
+          <TabsTrigger value="applicants" className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">Applicants</TabsTrigger>
+          <TabsTrigger value="team" className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">My Team</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="applicants" className="mt-4">
+        <TabsContent value="applicants" className="mt-5">
           {applicants.length === 0 ? (
-            <Card className="p-10 text-center text-sm text-muted-foreground">All caught up — no pending applicants.</Card>
+            <Card className="border-dashed border-border/60 bg-card/60 p-12 text-center text-sm text-muted-foreground backdrop-blur">All caught up — no pending applicants.</Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2">
               {applicants.map((a) => (
-                <Card key={a.id} className="p-5">
+                <Card key={a.id} className="hover-lift border-border/60 bg-[image:var(--gradient-card)] p-5 shadow-[var(--shadow-soft)] backdrop-blur">
                   <div className="flex items-start gap-4">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback className="bg-primary/10 text-primary">
+                    <Avatar className="h-12 w-12 ring-2 ring-primary/20">
+                      <AvatarFallback className="bg-[image:var(--gradient-primary)] font-semibold text-primary-foreground">
                         {a.name.split(" ").map((p: any) => p[0]).join("")}
                       </AvatarFallback>
                     </Avatar>
@@ -74,19 +74,19 @@ function MentorDashboard() {
                           <h3 className="font-semibold">{a.name}</h3>
                           <p className="text-xs text-muted-foreground">{a.email}</p>
                         </div>
-                        <div className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                        <div className="flex items-center gap-1 rounded-full bg-[image:var(--gradient-primary)] px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow-sm">
                           <Sparkles className="h-3 w-3" />
                           AI 85
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        <Badge variant="secondary" className="font-normal">New Applicant</Badge>
+                        <Badge variant="secondary" className="rounded-full font-normal">New Applicant</Badge>
                       </div>
                       <div className="mt-4 flex gap-2">
-                        <Button size="sm" onClick={() => decide(a.id, true)} className="flex-1">
+                        <Button size="sm" onClick={() => decide(a.id, true)} className="btn-gradient flex-1 rounded-full">
                           <Check className="h-4 w-4" /> Accept
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => decide(a.id, false)} className="flex-1">
+                        <Button size="sm" variant="outline" onClick={() => decide(a.id, false)} className="flex-1 rounded-full">
                           <X className="h-4 w-4" /> Reject
                         </Button>
                       </div>
@@ -98,8 +98,8 @@ function MentorDashboard() {
           )}
         </TabsContent>
 
-        <TabsContent value="team" className="mt-4">
-          <Card className="overflow-hidden">
+        <TabsContent value="team" className="mt-5">
+          <Card className="overflow-hidden border-border/60 bg-card/80 shadow-[var(--shadow-soft)] backdrop-blur">
             <InternTrackerTable interns={internProgress.filter(i => i.status === "Accepted")} />
           </Card>
         </TabsContent>
