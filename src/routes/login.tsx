@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { useStore, type Role } from "@/lib/store";
+import { useStore } from "@/lib/store";
+import { loginFn } from "@/api/auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
@@ -23,15 +24,23 @@ function LoginPage() {
   const { setCurrentUser } = useStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("intern");
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return toast.error("Enter email and password");
-    const name = email.split("@")[0].replace(/[._-]/g, " ");
-    setCurrentUser({ id: crypto.randomUUID(), email, name: name.replace(/\b\w/g, (c) => c.toUpperCase()), role });
-    toast.success(`Welcome back, ${role}!`);
-    navigate({ to: role === "admin" ? "/admin" : role === "mentor" ? "/mentor" : "/intern" });
+    setLoading(true);
+    try {
+      const user = await loginFn({ data: { email, password } });
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role as any, status: user.status as any });
+      toast.success(`Welcome back, ${user.name}!`);
+      const dest = user.role === "admin" ? "/admin" : user.role === "mentor" ? "/mentor" : "/intern";
+      navigate({ to: dest, replace: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,31 +64,16 @@ function LoginPage() {
           <p className="mt-1 text-sm text-muted-foreground">Welcome back. Continue to your dashboard.</p>
           <form onSubmit={submit} className="mt-6 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+              <Label htmlFor="login-email">Email</Label>
+              <Input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              <Label htmlFor="login-password">Password</Label>
+              <Input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
-            <div className="space-y-2">
-              <Label>Sign in as (demo)</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["intern", "mentor", "admin"] as Role[]).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRole(r)}
-                    className={`rounded-md border px-3 py-2 text-sm capitalize transition ${
-                      role === r ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Button type="submit" className="w-full">Sign in</Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Signing in…" : "Sign in"}
+            </Button>
             <p className="text-center text-sm text-muted-foreground">
               New here? <Link to="/signup" className="font-medium text-primary hover:underline">Create an account</Link>
             </p>

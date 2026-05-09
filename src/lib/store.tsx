@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { getCurrentUserFn } from "@/api/auth";
 
-export type Role = "admin" | "mentor" | "intern";
+export type Role = "admin" | "mentor" | "intern" | "alumni";
 
 export type AppUser = {
   id: string;
@@ -18,51 +19,56 @@ export type Notification = {
   read: boolean;
 };
 
-export type Task = {
-  id: string;
-  title: string;
-  detail?: string;
-  status: "todo" | "doing" | "done";
-};
-
 type Store = {
   currentUser: AppUser | null;
   setCurrentUser: (u: AppUser | null) => void;
-  users: AppUser[];
-  setUsers: (u: AppUser[]) => void;
   notifications: Notification[];
   markAllRead: () => void;
-  tasks: Task[];
-  setTasks: (t: Task[]) => void;
+  isLoadingUser: boolean;
 };
 
 const StoreCtx = createContext<Store | null>(null);
-
-const SEED_USERS: AppUser[] = [];
 
 const SEED_NOTIFS: Notification[] = [
   { id: "n1", title: "Welcome", body: "Welcome to the Internship Management System!", time: "1d ago", read: true },
 ];
 
-const SEED_TASKS: Task[] = [];
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUserState] = useState<AppUser | null>(null);
-  const [users, setUsers] = useState<AppUser[]>(SEED_USERS);
   const [notifications, setNotifications] = useState<Notification[]>(SEED_NOTIFS);
-  const [tasks, setTasks] = useState<Task[]>(SEED_TASKS);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("ims:user");
-      if (raw) setCurrentUserState(JSON.parse(raw));
-    } catch {}
+    const initUser = async () => {
+      try {
+        const cookieStr = document.cookie;
+        const match = cookieStr.match(new RegExp('(^| )ims_userid=([^;]+)'));
+        if (match) {
+          const userId = match[2];
+          const user = await getCurrentUserFn({ data: userId });
+          if (user) {
+            setCurrentUserState(user as AppUser);
+          } else {
+            // Invalid or deleted user
+            document.cookie = "ims_userid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load user from DB:", err);
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+    initUser();
   }, []);
 
   const setCurrentUser = (u: AppUser | null) => {
     setCurrentUserState(u);
-    if (u) localStorage.setItem("ims:user", JSON.stringify(u));
-    else localStorage.removeItem("ims:user");
+    if (u) {
+      document.cookie = `ims_userid=${u.id}; path=/; max-age=86400;`; // 1 day expiration
+    } else {
+      document.cookie = "ims_userid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    }
   };
 
   const markAllRead = () =>
@@ -70,7 +76,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <StoreCtx.Provider
-      value={{ currentUser, setCurrentUser, users, setUsers, notifications, markAllRead, tasks, setTasks }}
+      value={{ currentUser, setCurrentUser, notifications, markAllRead, isLoadingUser }}
     >
       {children}
     </StoreCtx.Provider>

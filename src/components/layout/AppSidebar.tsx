@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Users, Briefcase, KanbanSquare, GraduationCap, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Briefcase, KanbanSquare, GraduationCap, LogOut, UserCircle } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,7 @@ const NAV: { title: string; url: string; icon: any; roles: Role[] }[] = [
   { title: "Manage Users", url: "/manage-users", icon: Users, roles: ["admin"] },
   { title: "Mentor Dashboard", url: "/mentor", icon: Users, roles: ["mentor", "admin"] },
   { title: "Intern Dashboard", url: "/intern", icon: KanbanSquare, roles: ["intern", "admin"] },
+  { title: "My Profile", url: "/profile", icon: UserCircle, roles: ["admin", "mentor", "intern", "alumni"] },
 ];
 
 export function AppSidebar() {

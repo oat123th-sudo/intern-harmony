@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { GraduationCap, CloudUpload, FileText, X } from "lucide-react";
+import { GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/lib/store";
+import { signupFn } from "@/api/auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/signup")({
@@ -25,24 +26,24 @@ function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [resume, setResume] = useState<File | null>(null);
   const [pdpa, setPdpa] = useState(false);
-  const [drag, setDrag] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const onFile = (f: File | null) => {
-    if (!f) return;
-    if (f.size > 10 * 1024 * 1024) return toast.error("File must be under 10MB");
-    setResume(f);
-  };
-
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password) return toast.error("Please fill in all fields");
-    if (!resume) return toast.error("Please upload your resume");
     if (!pdpa) return toast.error("You must accept the PDPA consent");
-    setCurrentUser({ id: crypto.randomUUID(), name, email, role: "intern", status: "Pending" });
-    toast.success("Application submitted! Welcome to InternHub.");
-    navigate({ to: "/intern" });
+    setLoading(true);
+    try {
+      const user = await signupFn({ data: { name, email, password } });
+      setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role as any, status: user.status as any });
+      toast.success("Application submitted! Welcome to InternHub.");
+      navigate({ to: "/intern", replace: true });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create account");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -53,55 +54,20 @@ function SignupPage() {
             <GraduationCap className="h-4 w-4 text-primary" /> InternHub
           </Link>
           <h2 className="text-2xl font-semibold">Apply for an internship</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Tell us about yourself and upload your resume.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create your account to get started.</p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full name</Label>
-                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@uni.edu" />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="signup-name">Full name</Label>
+              <Input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
+              <Label htmlFor="signup-email">Email</Label>
+              <Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@uni.edu" />
             </div>
-
             <div className="space-y-2">
-              <Label>Resume (PDF, DOCX)</Label>
-              <label
-                htmlFor="resume"
-                onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
-                onDragLeave={() => setDrag(false)}
-                onDrop={(e) => { e.preventDefault(); setDrag(false); onFile(e.dataTransfer.files?.[0] ?? null); }}
-                className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition ${
-                  drag ? "border-primary bg-primary/5" : "border-input hover:bg-muted/50"
-                }`}
-              >
-                {resume ? (
-                  <div className="flex w-full items-center gap-3 rounded-md bg-muted p-3 text-left">
-                    <FileText className="h-5 w-5 text-primary" />
-                    <div className="flex-1 truncate">
-                      <p className="truncate text-sm font-medium">{resume.name}</p>
-                      <p className="text-xs text-muted-foreground">{(resume.size / 1024).toFixed(0)} KB</p>
-                    </div>
-                    <Button type="button" variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); setResume(null); }}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <CloudUpload className="h-8 w-8 text-muted-foreground" />
-                    <p className="mt-2 text-sm font-medium">Drop your resume here, or <span className="text-primary">browse</span></p>
-                    <p className="text-xs text-muted-foreground">PDF or DOCX, up to 10MB</p>
-                  </>
-                )}
-                <input id="resume" type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
-              </label>
+              <Label htmlFor="signup-password">Password</Label>
+              <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
             </div>
 
             <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
@@ -113,7 +79,9 @@ function SignupPage() {
               </Label>
             </div>
 
-            <Button type="submit" className="w-full">Create account</Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Creating account…" : "Create account"}
+            </Button>
             <p className="text-center text-sm text-muted-foreground">
               Already registered? <Link to="/login" className="font-medium text-primary hover:underline">Sign in</Link>
             </p>
@@ -135,3 +103,4 @@ function SignupPage() {
     </div>
   );
 }
+

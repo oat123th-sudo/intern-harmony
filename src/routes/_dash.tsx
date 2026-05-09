@@ -2,7 +2,8 @@ import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { TopHeader } from "@/components/layout/TopHeader";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/_dash")({
   component: DashLayout,
@@ -10,19 +11,18 @@ export const Route = createFileRoute("/_dash")({
 
 function DashLayout() {
   const navigate = useNavigate();
-  const [isChecking, setIsChecking] = useState(true);
+  const { currentUser, isLoadingUser } = useStore();
 
   useEffect(() => {
-    const raw = localStorage.getItem("ims:user");
-    if (!raw) {
+    if (isLoadingUser) return; // Wait for cookie session hydration
+    if (!currentUser) {
       navigate({ to: "/login", replace: true });
-    } else {
-      setIsChecking(false);
     }
-  }, [navigate]);
+  }, [isLoadingUser, currentUser, navigate]);
 
-  if (isChecking) {
-    return null; // Don't render layout until client auth check passes
+  // Show nothing while checking auth or if no user (redirect will happen)
+  if (isLoadingUser || !currentUser) {
+    return null;
   }
 
   return (

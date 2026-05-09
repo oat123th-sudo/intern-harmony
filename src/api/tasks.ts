@@ -1,14 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
 import connectDB from "@/lib/db";
-import Task from "@/models/Task";
+import { ObjectId } from "mongodb";
+
+type TaskDoc = {
+  _id?: ObjectId;
+  title: string;
+  detail?: string;
+  deadline: Date;
+  timeOfDay: "เช้า" | "บ่าย" | "เย็น";
+  status: "todo" | "doing" | "done";
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+async function tasks() {
+  const db = await connectDB();
+  return db.collection<TaskDoc>("tasks");
+}
 
 export const getTasksFn = createServerFn({ method: "GET" })
   .inputValidator((userId: string) => userId)
   .handler(async ({ data: userId }) => {
-    await connectDB();
-    const tasks = await Task.find({ userId }).sort({ createdAt: -1 });
-    return tasks.map((t: any) => ({
-      id: t._id.toString(),
+    const col = await tasks();
+    const list = await col.find({ userId }).sort({ createdAt: -1 }).toArray();
+    return list.map((t) => ({
+      id: t._id!.toString(),
       title: t.title,
       detail: t.detail,
       deadline: t.deadline.toISOString(),
@@ -21,38 +38,42 @@ export const getTasksFn = createServerFn({ method: "GET" })
 export const createTaskFn = createServerFn({ method: "POST" })
   .inputValidator((data: { title: string; detail?: string; deadline: string; userId: string }) => data)
   .handler(async ({ data }) => {
-    await connectDB();
-    
+    const col = await tasks();
     const hour = new Date().getHours();
-    let timeOfDay = "เช้า";
+    let timeOfDay: TaskDoc["timeOfDay"] = "เช้า";
     if (hour >= 12 && hour < 17) timeOfDay = "บ่าย";
     else if (hour >= 17) timeOfDay = "เย็น";
 
-    const task = new Task({
+    const now = new Date();
+    const doc: TaskDoc = {
       title: data.title,
       detail: data.detail,
       deadline: new Date(data.deadline),
       timeOfDay,
-      userId: data.userId,
       status: "todo",
-    });
+      userId: data.userId,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-    await task.save();
+    const result = await col.insertOne(doc);
     return {
-      id: task._id.toString(),
-      title: task.title,
-      detail: task.detail,
-      deadline: task.deadline.toISOString(),
-      timeOfDay: task.timeOfDay,
-      createdAt: task.createdAt.toISOString(),
-      status: task.status,
+      id: result.insertedId.toString(),
+      title: doc.title,
+      detail: doc.detail,
+      deadline: doc.deadline.toISOString(),
+      timeOfDay: doc.timeOfDay,
+      createdAt: doc.createdAt.toISOString(),
+      status: doc.status,
     };
   });
 
 export const updateTaskStatusFn = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; status: "todo" | "doing" | "done" }) => data)
   .handler(async ({ data }) => {
-    await connectDB();
-    await Task.findByIdAndUpdate(data.id, { status: data.status });
+    const col = await tasks();
+    let oid: ObjectId;
+    try { oid = new ObjectId(data.id); } catch { throw new Error("Invalid task ID"); }
+    await col.updateOne({ _id: oid }, { $set: { status: data.status, updatedAt: new Date() } });
     return { success: true };
   });
