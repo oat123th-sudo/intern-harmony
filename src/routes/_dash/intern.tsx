@@ -1,21 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { ExternalLink, MessageSquare, Trophy, ChevronDown, ChevronUp, Loader2, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, ExternalLink, MessageSquare, Trophy, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getTasksFn, createTaskFn, updateTaskStatusFn } from "@/api/tasks";
+import { getTasksFn, updateTaskStatusFn } from "@/api/tasks";
 import { useStore } from "@/lib/store";
+import { getTeam } from "@/lib/teams";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_dash/intern")({
   head: () => ({ meta: [{ title: "Intern Dashboard — InternHub" }] }),
@@ -96,6 +93,7 @@ function TaskCard({
           )}
         </div>
       )}
+      {/* Intern can move task status themselves */}
       <Select
         value={task.status}
         onValueChange={(v) => move(task.id, v as TaskData["status"])}
@@ -118,10 +116,7 @@ function InternDashboard() {
   const { currentUser } = useStore();
   const queryClient = useQueryClient();
 
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [detail, setDetail] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const team = getTeam(currentUser?.team);
 
   const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ["tasks", currentUser?.id],
@@ -133,24 +128,6 @@ function InternDashboard() {
   const done = tasks.filter((t: any) => t.status === "done").length;
   const progress = total ? Math.round((done / total) * 100) : 0;
 
-  // Today's ISO date string for min deadline validation
-  const todayStr = new Date().toISOString().split("T")[0];
-
-  const createMutation = useMutation({
-    mutationFn: (vars: any) => createTaskFn({ data: vars }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks", currentUser?.id] });
-      setTitle("");
-      setDetail("");
-      setDeadline("");
-      setOpen(false);
-      toast.success("Task added");
-    },
-    onError: (err: any) => {
-      toast.error(err?.message || "Failed to add task");
-    },
-  });
-
   const updateMutation = useMutation({
     mutationFn: (vars: { id: string; status: "todo" | "doing" | "done" }) =>
       updateTaskStatusFn({ data: vars }),
@@ -161,28 +138,6 @@ function InternDashboard() {
       toast.error(err?.message || "Failed to update task status");
     },
   });
-
-  const addTask = () => {
-    const trimmed = title.trim();
-    if (!trimmed) {
-      toast.error("Task title is required");
-      return;
-    }
-    if (!deadline) {
-      toast.error("Deadline is required");
-      return;
-    }
-    if (!currentUser?.id) {
-      toast.error("You must be logged in to add tasks");
-      return;
-    }
-    createMutation.mutate({
-      title: trimmed,
-      detail: detail.trim() || undefined,
-      deadline,
-      userId: currentUser.id,
-    });
-  };
 
   const move = (id: string, status: TaskData["status"]) =>
     updateMutation.mutate({ id, status });
@@ -201,68 +156,22 @@ function InternDashboard() {
           <p className="mt-1.5 text-sm text-muted-foreground">
             Here's a quick look at your internship progress.
           </p>
-        </div>
-
-        <Button
-          className="btn-gradient h-10 rounded-full px-5 font-medium"
-          onClick={() => setOpen(true)}
-        >
-          <Plus className="h-4 w-4" /> Add task
-        </Button>
-
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>New task</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="What are you working on?"
-                maxLength={200}
-              />
-              <div className="space-y-1">
-                <p className="text-xs font-medium">
-                  Deadline <span className="text-destructive">*</span>
-                </p>
-                <Input
-                  type="date"
-                  value={deadline}
-                  min={todayStr}
-                  onChange={(e) => setDeadline(e.target.value)}
-                />
-              </div>
-              <Textarea
-                value={detail}
-                onChange={(e) => setDetail(e.target.value)}
-                placeholder="Add some details (optional)..."
-                className="min-h-[100px]"
-                maxLength={2000}
-              />
+          {team && (
+            <div className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${team.bg} ${team.color} border ${team.border}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${team.dot}`} />
+              {team.label}
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setOpen(false)}
-                disabled={createMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={addTask}
-                className="btn-gradient"
-                disabled={createMutation.isPending}
-              >
-                {createMutation.isPending ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>
-                ) : (
-                  "Add"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          )}
+        </div>
+      </div>
+
+      {/* ── Task notice banner ── */}
+      <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <p>
+          Tasks are assigned by your <span className="font-medium text-foreground">Mentor</span> or{" "}
+          <span className="font-medium text-foreground">Admin</span>. You can update the status of each task as you progress.
+        </p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">

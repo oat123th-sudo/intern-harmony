@@ -15,6 +15,7 @@ export type AppUser = {
   email: string;
   role: Role;
   status?: "Pending" | "Accepted" | "Rejected" | "Active";
+  team?: string;
 };
 
 export type Notification = {

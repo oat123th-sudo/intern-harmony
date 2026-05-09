@@ -9,7 +9,6 @@ import { z } from "zod";
 export const UserRoleSchema = z.enum(["admin", "mentor", "intern", "alumni"]);
 export const UserStatusSchema = z.enum(["Pending", "Accepted", "Rejected", "Active"]);
 
-
 export type UserDoc = {
   _id?: ObjectId;
   name: string;
@@ -17,6 +16,7 @@ export type UserDoc = {
   password?: string;
   role: z.infer<typeof UserRoleSchema>;
   status: z.infer<typeof UserStatusSchema>;
+  team?: string; // team-1 | team-2 | team-3 | team-4
   phoneNumber?: string;
   lineId?: string;
   facebook?: string;
@@ -42,6 +42,7 @@ const SignupSchema = z.object({
     .string()
     .min(6, "Password must be at least 6 characters")
     .max(128),
+  team: z.string().min(1, "Please select a team"),
 });
 
 export const signupFn = createServerFn({ method: "POST" })
@@ -67,6 +68,7 @@ export const signupFn = createServerFn({ method: "POST" })
       password: hashedPassword,
       role: isAdmin ? "admin" : "intern",
       status: isAdmin ? "Active" : "Pending",
+      team: isAdmin ? undefined : data.team,
       createdAt: now,
       updatedAt: now,
     };
@@ -79,6 +81,7 @@ export const signupFn = createServerFn({ method: "POST" })
         email: doc.email,
         role: doc.role,
         status: doc.status,
+        team: doc.team,
       };
     } catch (err: any) {
       // MongoDB duplicate-key error code 11000
@@ -125,6 +128,7 @@ export const loginFn = createServerFn({ method: "POST" })
       email: user.email,
       role: user.role,
       status: user.status,
+      team: user.team,
     };
   });
 
@@ -149,6 +153,7 @@ export const getCurrentUserFn = createServerFn({ method: "GET" })
       email: user.email,
       role: user.role,
       status: user.status,
+      team: user.team,
       phoneNumber: user.phoneNumber,
       lineId: user.lineId,
       facebook: user.facebook,
@@ -201,6 +206,7 @@ export const updateProfileFn = createServerFn({ method: "POST" })
       email: result.email,
       role: result.role,
       status: result.status,
+      team: result.team,
       phoneNumber: result.phoneNumber,
       lineId: result.lineId,
       facebook: result.facebook,

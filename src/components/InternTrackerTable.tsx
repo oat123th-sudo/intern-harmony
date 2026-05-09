@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { CheckCircle2, Clock, AlertCircle, Eye, MinusCircle } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Eye, MinusCircle, Plus } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { getTeam } from "@/lib/teams";
 
 interface Task {
   id: string;
@@ -17,6 +18,7 @@ interface InternProgress {
   name: string;
   email: string;
   status: string;
+  team?: string;
   tasks: Task[];
 }
 
@@ -47,7 +49,15 @@ function ProgressIcon({ status }: { status: ProgressStatus }) {
   }
 }
 
-export function InternTrackerTable({ interns }: { interns: InternProgress[] }) {
+export function InternTrackerTable({
+  interns,
+  onAssignTask,
+  showTeam = false,
+}: {
+  interns: InternProgress[];
+  onAssignTask?: (intern: { id: string; name: string }) => void;
+  showTeam?: boolean;
+}) {
   const [selectedIntern, setSelectedIntern] = useState<InternProgress | null>(null);
 
   return (
@@ -56,20 +66,36 @@ export function InternTrackerTable({ interns }: { interns: InternProgress[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>Intern Name</TableHead>
+            {showTeam && <TableHead>Team</TableHead>}
             <TableHead>Status</TableHead>
             <TableHead>Tasks</TableHead>
             <TableHead>Progress</TableHead>
-            <TableHead className="w-12 text-right">Details</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {interns.map((intern) => {
             const progressStatus = getProgressStatus(intern.tasks);
             const doneCount = intern.tasks.filter((t) => t.status === "done").length;
+            const team = getTeam(intern.team);
 
             return (
               <TableRow key={intern.id}>
                 <TableCell className="font-medium">{intern.name}</TableCell>
+                {showTeam && (
+                  <TableCell>
+                    {team ? (
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${team.bg} ${team.color} border ${team.border}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${team.dot}`} />
+                        {team.label}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )}
                 <TableCell>
                   <Badge
                     variant={
@@ -88,14 +114,27 @@ export function InternTrackerTable({ interns }: { interns: InternProgress[] }) {
                   <ProgressIcon status={progressStatus} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setSelectedIntern(intern)}
-                    aria-label={`View details for ${intern.name}`}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    {onAssignTask && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 rounded-full px-2.5 text-xs"
+                        onClick={() => onAssignTask({ id: intern.id, name: intern.name })}
+                        aria-label={`Assign task to ${intern.name}`}
+                      >
+                        <Plus className="mr-1 h-3 w-3" /> Task
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedIntern(intern)}
+                      aria-label={`View details for ${intern.name}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );
@@ -103,7 +142,7 @@ export function InternTrackerTable({ interns }: { interns: InternProgress[] }) {
           {interns.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={showTeam ? 6 : 5}
                 className="h-24 text-center text-muted-foreground"
               >
                 No interns found.
@@ -113,6 +152,7 @@ export function InternTrackerTable({ interns }: { interns: InternProgress[] }) {
         </TableBody>
       </Table>
 
+      {/* Task detail dialog */}
       <Dialog
         open={!!selectedIntern}
         onOpenChange={(open) => !open && setSelectedIntern(null)}

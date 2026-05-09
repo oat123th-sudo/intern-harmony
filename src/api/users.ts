@@ -5,14 +5,14 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { UserRoleSchema, UserStatusSchema } from "./auth";
 
-// ─── Schemas & Types ──────────────────────────────────────────────────────────
-
+// ─── Types ────────────────────────────────────────────────────────────────────
 export type UserDoc = {
   _id?: ObjectId;
   name: string;
   email: string;
   role: z.infer<typeof UserRoleSchema>;
   status: z.infer<typeof UserStatusSchema>;
+  team?: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -44,6 +44,22 @@ export const getUsersFn = createServerFn({ method: "GET" })
       email: u.email,
       role: u.role,
       status: u.status,
+      team: u.team,
+    }));
+  });
+
+// ─── Public: Get Mentors List (for Signup) ────────────────────────────────────
+export const getMentorsFn = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const col = await users();
+    const list = await col
+      .find({ role: "mentor" }, { projection: { password: 0 } })
+      .sort({ name: 1 })
+      .toArray();
+    return list.map((u) => ({
+      id: u._id!.toString(),
+      name: u.name,
+      team: u.team,
     }));
   });
 
@@ -61,6 +77,7 @@ export const getApplicantsFn = createServerFn({ method: "GET" })
       email: u.email,
       role: u.role,
       status: u.status,
+      team: u.team,
     }));
   });
 
@@ -88,13 +105,12 @@ export const updateApplicantStatusFn = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-// ─── Admin: Update Role ────────────────────────────────────────────────────────
-// NOTE: Authorization is enforced SERVER-SIDE by looking up the currentUserId
-// in the database, never trusting the email string sent from the client.
+// ─── Admin: Update Role (+ optionally team) ────────────────────────────────────
 const UpdateRoleSchema = z.object({
   id: z.string().min(1),
   role: UserRoleSchema,
-  currentUserId: z.string().min(1), // send ID, not email
+  team: z.string().optional(),
+  currentUserId: z.string().min(1),
 });
 
 export const updateUserRoleFn = createServerFn({ method: "POST" })
@@ -121,9 +137,15 @@ export const updateUserRoleFn = createServerFn({ method: "POST" })
     if (target?.email === ADMIN_EMAIL && data.role !== "admin")
       throw new Error("Cannot change the role of the primary admin account");
 
+    const updateFields: Partial<UserDoc> = {
+      role: data.role,
+      updatedAt: new Date(),
+    };
+    if (data.team !== undefined) updateFields.team = data.team || undefined;
+
     const result = await col.updateOne(
       { _id: oid },
-      { $set: { role: data.role, updatedAt: new Date() } }
+      { $set: updateFields }
     );
 
     if (result.matchedCount === 0) throw new Error("User not found");
@@ -133,7 +155,7 @@ export const updateUserRoleFn = createServerFn({ method: "POST" })
 // ─── Admin: Delete User ────────────────────────────────────────────────────────
 const DeleteUserSchema = z.object({
   id: z.string().min(1),
-  currentUserId: z.string().min(1), // send ID, not email
+  currentUserId: z.string().min(1),
 });
 
 export const deleteUserFn = createServerFn({ method: "POST" })
@@ -174,15 +196,22 @@ export const deleteUserFn = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-// ─── Mentor/Admin: Get Intern Progress ────────────────────────────────────────
+// ─── Mentor/Admin: Get Intern Progress (with optional team filter) ─────────────
 export const getInternProgressFn = createServerFn({ method: "GET" })
-  .handler(async () => {
+  .inputValidator((teamId: unknown) => {
+    if (!teamId) return "";
+    return z.string().parse(teamId);
+  })
+  .handler(async ({ data: teamId }) => {
     const userCol = await users();
     const tc = await tasksCol();
 
-    // Fetch all interns (exclude password)
+    // Build filter: interns only, optionally filter by team
+    const internFilter: Record<string, unknown> = { role: "intern" };
+    if (teamId) internFilter.team = teamId;
+
     const interns = await userCol
-      .find({ role: "intern" }, { projection: { password: 0 } })
+      .find(internFilter, { projection: { password: 0 } })
       .toArray();
 
     if (interns.length === 0) return [];
@@ -214,6 +243,7 @@ export const getInternProgressFn = createServerFn({ method: "GET" })
         name: intern.name,
         email: intern.email,
         status: intern.status,
+        team: intern.team,
         tasks: internTasks.map((t: any) => ({
           id: t._id!.toString(),
           title: t.title,

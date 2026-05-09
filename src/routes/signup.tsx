@@ -1,13 +1,21 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useStore } from "@/lib/store";
 import { signupFn } from "@/api/auth";
+import { TEAMS } from "@/lib/teams";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/signup")({
@@ -26,16 +34,18 @@ function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [team, setTeam] = useState("");
   const [pdpa, setPdpa] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !password) return toast.error("Please fill in all fields");
+    if (!team) return toast.error("Please select a team");
     if (!pdpa) return toast.error("You must accept the PDPA consent");
     setLoading(true);
     try {
-      const user = await signupFn({ data: { name, email, password } });
+      const user = await signupFn({ data: { name, email, password, team } });
       setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role as any, status: user.status as any });
       toast.success("Application submitted! Welcome to InternHub.");
       navigate({ to: "/intern", replace: true });
@@ -67,24 +77,53 @@ function SignupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="signup-password">Password</Label>
-              <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
+              <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
             </div>
 
-            <div 
+            {/* ── Team Selection ── */}
+            <div className="space-y-2">
+              <Label htmlFor="signup-team" className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-primary" />
+                Select your team <span className="text-destructive font-bold">*</span>
+              </Label>
+              <Select value={team} onValueChange={setTeam}>
+                <SelectTrigger id="signup-team" className="w-full">
+                  <SelectValue placeholder="Choose your internship team…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEAMS.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{t.label}</span>
+                        <span className="text-xs text-muted-foreground">{t.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {team && (
+                <p className="text-xs text-muted-foreground pl-1">
+                  ✓ Selected: <span className="font-medium text-foreground">{TEAMS.find((t) => t.id === team)?.label}</span>
+                </p>
+              )}
+            </div>
+
+            {/* ── PDPA ── */}
+            <div
               className="flex items-start gap-4 rounded-2xl border border-border/50 bg-white/40 p-5 cursor-pointer hover:bg-white/60 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 select-none group active:scale-[0.99] backdrop-blur-sm"
               onClick={() => setPdpa(!pdpa)}
             >
               <div className="flex items-center justify-center pt-0.5">
-                <Checkbox 
-                  id="pdpa" 
-                  checked={pdpa} 
-                  onCheckedChange={(v) => setPdpa(v === true)} 
+                <Checkbox
+                  id="pdpa"
+                  checked={pdpa}
+                  onCheckedChange={(v) => setPdpa(v === true)}
                   className="transition-all duration-300 group-hover:scale-110 group-active:scale-90"
-                  onClick={(e) => e.stopPropagation()} 
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
-              <Label 
-                htmlFor="pdpa" 
+              <Label
+                htmlFor="pdpa"
                 className="text-sm font-normal leading-relaxed cursor-pointer flex-1 text-muted-foreground group-hover:text-foreground transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -109,13 +148,16 @@ function SignupPage() {
           <h1 className="text-4xl font-semibold leading-tight">Start your<br/>internship journey.</h1>
           <p className="mt-4 max-w-md text-sm opacity-90">Submit your application in minutes. Track progress, meet your mentor, and ship real projects.</p>
         </div>
-        <ul className="space-y-2 text-sm opacity-90">
-          <li>✓ Mentor matching</li>
-          <li>✓ AI-assisted screening</li>
-          <li>✓ Real project portfolio</li>
-        </ul>
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest opacity-60">Available Teams</p>
+          {TEAMS.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 text-sm opacity-90">
+              <span className="h-1.5 w-1.5 rounded-full bg-white/80" />
+              {t.label}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
-

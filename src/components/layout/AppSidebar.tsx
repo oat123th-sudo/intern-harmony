@@ -19,8 +19,8 @@ import { useNavigate } from "@tanstack/react-router";
 const NAV: { title: string; url: string; icon: any; roles: Role[] }[] = [
   { title: "Admin Dashboard", url: "/admin", icon: LayoutDashboard, roles: ["admin"] },
   { title: "Manage Users", url: "/manage-users", icon: Users, roles: ["admin"] },
-  { title: "Mentor Dashboard", url: "/mentor", icon: Users, roles: ["mentor", "admin"] },
-  { title: "Intern Dashboard", url: "/intern", icon: KanbanSquare, roles: ["intern", "admin"] },
+  { title: "Mentor Dashboard", url: "/mentor", icon: Users, roles: ["mentor"] },
+  { title: "Intern Dashboard", url: "/intern", icon: KanbanSquare, roles: ["intern"] },
   { title: "My Profile", url: "/profile", icon: UserCircle, roles: ["admin", "mentor", "intern", "alumni"] },
 ];
 

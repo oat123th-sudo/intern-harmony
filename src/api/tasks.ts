@@ -8,7 +8,6 @@ import { z } from "zod";
 const TaskStatusSchema = z.enum(["todo", "doing", "done"]);
 const TimeOfDaySchema = z.enum(["เช้า", "บ่าย", "เย็น"]);
 
-
 export type TaskDoc = {
   _id?: ObjectId;
   title: string;
@@ -16,14 +15,26 @@ export type TaskDoc = {
   deadline: Date;
   timeOfDay: z.infer<typeof TimeOfDaySchema>;
   status: z.infer<typeof TaskStatusSchema>;
-  userId: string;
+  userId: string;      // intern's user id (task owner)
+  assignedById?: string; // admin/mentor who assigned it
   createdAt: Date;
   updatedAt: Date;
+};
+
+type UserDocLight = {
+  _id?: ObjectId;
+  role: string;
+  team?: string;
 };
 
 async function tasks() {
   const db = await connectDB();
   return db.collection<TaskDoc>("tasks");
+}
+
+async function usersCol() {
+  const db = await connectDB();
+  return db.collection<UserDocLight>("users");
 }
 
 // ─── Helper: resolve timeOfDay from a Date ────────────────────────────────────
@@ -34,7 +45,7 @@ function resolveTimeOfDay(date: Date): TaskDoc["timeOfDay"] {
   return "เช้า";
 }
 
-// ─── Get Tasks ────────────────────────────────────────────────────────────────
+// ─── Get Tasks (for a specific intern) ────────────────────────────────────────
 export const getTasksFn = createServerFn({ method: "GET" })
   .inputValidator((userId: unknown) => z.string().min(1).parse(userId))
   .handler(async ({ data: userId }) => {
@@ -56,21 +67,49 @@ export const getTasksFn = createServerFn({ method: "GET" })
     }));
   });
 
-// ─── Create Task ──────────────────────────────────────────────────────────────
-const CreateTaskSchema = z.object({
+// ─── Assign Task (Admin or Mentor only) ──────────────────────────────────────
+const AssignTaskSchema = z.object({
+  internId: z.string().min(1, "Intern ID is required"),
   title: z.string().min(1, "Title is required").max(200),
   detail: z.string().max(2000).optional(),
-  // Accept ISO string from frontend; must be a valid date
   deadline: z
     .string()
     .min(1, "Deadline is required")
     .refine((s) => !isNaN(Date.parse(s)), { message: "Invalid deadline date" }),
-  userId: z.string().min(1, "User ID is required"),
+  assignedById: z.string().min(1, "Assigner ID is required"),
 });
 
-export const createTaskFn = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => CreateTaskSchema.parse(data))
+export const assignTaskFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => AssignTaskSchema.parse(data))
   .handler(async ({ data }) => {
+    if (!ObjectId.isValid(data.internId)) throw new Error("Invalid intern ID");
+    if (!ObjectId.isValid(data.assignedById)) throw new Error("Unauthorized");
+
+    const uc = await usersCol();
+
+    // 1. Verify the assigner exists and is admin or mentor
+    const assigner = await uc.findOne(
+      { _id: new ObjectId(data.assignedById) },
+      { projection: { role: 1, team: 1 } }
+    );
+    if (!assigner || (assigner.role !== "admin" && assigner.role !== "mentor")) {
+      throw new Error("Unauthorized: only admin or mentor can assign tasks");
+    }
+
+    // 2. If mentor, verify intern is in the same team
+    if (assigner.role === "mentor") {
+      const intern = await uc.findOne(
+        { _id: new ObjectId(data.internId) },
+        { projection: { team: 1, role: 1 } }
+      );
+      if (!intern || intern.role !== "intern") {
+        throw new Error("Target user is not an intern");
+      }
+      if (intern.team !== assigner.team) {
+        throw new Error("You can only assign tasks to interns in your team");
+      }
+    }
+
     const col = await tasks();
     const now = new Date();
     const deadlineDate = new Date(data.deadline);
@@ -81,7 +120,8 @@ export const createTaskFn = createServerFn({ method: "POST" })
       deadline: deadlineDate,
       timeOfDay: resolveTimeOfDay(now),
       status: "todo",
-      userId: data.userId,
+      userId: data.internId,
+      assignedById: data.assignedById,
       createdAt: now,
       updatedAt: now,
     };
@@ -98,7 +138,7 @@ export const createTaskFn = createServerFn({ method: "POST" })
     };
   });
 
-// ─── Update Task Status ───────────────────────────────────────────────────────
+// ─── Update Task Status (intern can move own tasks) ───────────────────────────
 const UpdateStatusSchema = z.object({
   id: z.string().min(1),
   status: TaskStatusSchema,
@@ -121,22 +161,39 @@ export const updateTaskStatusFn = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-// ─── Delete Task ──────────────────────────────────────────────────────────────
+// ─── Delete Task (admin/mentor or task owner) ─────────────────────────────────
 const DeleteTaskSchema = z.object({
   id: z.string().min(1),
-  userId: z.string().min(1), // ownership check
+  requesterId: z.string().min(1),
 });
 
 export const deleteTaskFn = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => DeleteTaskSchema.parse(data))
   .handler(async ({ data }) => {
     if (!ObjectId.isValid(data.id)) throw new Error("Invalid task ID");
+    if (!ObjectId.isValid(data.requesterId)) throw new Error("Unauthorized");
 
     const col = await tasks();
+    const uc = await usersCol();
     const oid = new ObjectId(data.id);
 
-    // Only delete if the task belongs to the requesting user
-    const result = await col.deleteOne({ _id: oid, userId: data.userId });
+    // Check who is requesting
+    const requester = await uc.findOne(
+      { _id: new ObjectId(data.requesterId) },
+      { projection: { role: 1 } }
+    );
+
+    if (!requester) throw new Error("Unauthorized");
+
+    let result;
+    if (requester.role === "admin" || requester.role === "mentor") {
+      // Admin/Mentor can delete any task
+      result = await col.deleteOne({ _id: oid });
+    } else {
+      // Intern can only delete their own tasks
+      result = await col.deleteOne({ _id: oid, userId: data.requesterId });
+    }
+
     if (result.deletedCount === 0) throw new Error("Task not found or access denied");
     return { success: true };
   });
