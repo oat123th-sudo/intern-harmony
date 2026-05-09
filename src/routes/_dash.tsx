@@ -27,12 +27,14 @@ function DashLayout() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-gradient-to-br from-background to-secondary/40">
+      <div className="bg-app-mesh flex min-h-screen w-full">
         <AppSidebar />
-        <SidebarInset className="flex flex-1 flex-col">
+        <SidebarInset className="flex flex-1 flex-col bg-transparent">
           <TopHeader />
-          <main className="flex-1 p-6">
-            <Outlet />
+          <main className="flex-1 px-6 py-8 md:px-10">
+            <div className="mx-auto w-full max-w-7xl">
+              <Outlet />
+            </div>
           </main>
         </SidebarInset>
       </div>
