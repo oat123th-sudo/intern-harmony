@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +17,7 @@ import { Check, X, Sparkles, Loader2, Plus, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getApplicantsFn, updateApplicantStatusFn, getInternProgressFn } from "@/api/users";
-import { assignTaskFn } from "@/api/tasks";
+import { assignTaskFn, assignTaskManyFn } from "@/api/tasks";
 import { useStore } from "@/lib/store";
 import { getTeam } from "@/lib/teams";
 import { InternTrackerTable } from "@/components/InternTrackerTable";
@@ -35,7 +34,7 @@ function MentorDashboard() {
   const queryClient = useQueryClient();
   const team = getTeam(currentUser?.team);
 
-  // Dialog state — null = open with picker, object = pre-filled intern
+  // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignTarget, setAssignTarget] = useState<AssignTarget>(null);
   const [taskTitle, setTaskTitle] = useState("");
@@ -43,38 +42,28 @@ function MentorDashboard() {
   const [taskDeadline, setTaskDeadline] = useState("");
   const todayStr = new Date().toISOString().split("T")[0];
 
-  // Load applicants in this mentor's team only
   const { data: applicants = [], isLoading: loadingApplicants } = useQuery({
     queryKey: ["applicants", currentUser?.team],
     queryFn: () => getApplicantsFn(),
-    select: (data) =>
-      currentUser?.team
-        ? data.filter((a: any) => a.team === currentUser.team)
-        : data,
+    select: (data) => currentUser?.team ? data.filter((a: any) => a.team === currentUser.team) : data,
   });
 
-  // Load ALL interns in mentor's team (including pending) — for task assignment
   const { data: internProgress = [], isLoading: loadingProgress } = useQuery({
     queryKey: ["internProgress", currentUser?.team],
     queryFn: () => getInternProgressFn({ data: currentUser?.team ?? "" }),
   });
 
   const decideMutation = useMutation({
-    mutationFn: (vars: { id: string; accept: boolean }) =>
-      updateApplicantStatusFn({ data: vars }),
+    mutationFn: (vars: { id: string; accept: boolean }) => updateApplicantStatusFn({ data: vars }),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["applicants", currentUser?.team] });
       queryClient.invalidateQueries({ queryKey: ["internProgress", currentUser?.team] });
-      toast[vars.accept ? "success" : "info"](
-        vars.accept ? "Applicant accepted" : "Applicant rejected"
-      );
+      toast[vars.accept ? "success" : "info"](vars.accept ? "Applicant accepted" : "Applicant rejected");
     },
-    onError: (err: any) => {
-      toast.error(err?.message || "Failed to update applicant status");
-    },
+    onError: (err: any) => toast.error(err?.message || "Failed to update applicant status"),
   });
 
-  const assignMutation = useMutation({
+  const assignSingleMutation = useMutation({
     mutationFn: (vars: { internId: string; title: string; detail?: string; deadline: string }) =>
       assignTaskFn({
         data: {
@@ -91,13 +80,30 @@ function MentorDashboard() {
       closeDialog();
       toast.success("Task assigned successfully");
     },
-    onError: (err: any) => {
-      toast.error(err?.message || "Failed to assign task");
-    },
+    onError: (err: any) => toast.error(err?.message || "Failed to assign task"),
   });
 
-  const decide = (id: string, accept: boolean) =>
-    decideMutation.mutate({ id, accept });
+  const assignManyMutation = useMutation({
+    mutationFn: (vars: { internIds: string[]; title: string; detail?: string; deadline: string }) =>
+      assignTaskManyFn({
+        data: {
+          internIds: vars.internIds,
+          title: vars.title,
+          detail: vars.detail,
+          deadline: vars.deadline,
+          assignedById: currentUser?.id ?? "",
+        },
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["internProgress", currentUser?.team] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      closeDialog();
+      toast.success(`Task assigned to ${data.count} team members`);
+    },
+    onError: (err: any) => toast.error(err?.message || "Failed to assign bulk tasks"),
+  });
+
+  const decide = (id: string, accept: boolean) => decideMutation.mutate({ id, accept });
 
   const openDialog = (intern?: { id: string; name: string }) => {
     setAssignTarget(intern ?? null);
@@ -119,13 +125,27 @@ function MentorDashboard() {
     if (!taskTitle.trim()) return toast.error("Task title is required");
     if (!taskDeadline) return toast.error("Deadline is required");
     if (!assignTarget) return toast.error("Please select an intern");
-    assignMutation.mutate({
-      internId: assignTarget.id,
-      title: taskTitle.trim(),
-      detail: taskDetail.trim() || undefined,
-      deadline: taskDeadline,
-    });
+
+    if (assignTarget.id === "ALL_TEAM_INTERNS") {
+      const teamInternIds = internProgress.map(i => i.id);
+      if (teamInternIds.length === 0) return toast.error("No active interns in your team to assign tasks to.");
+      assignManyMutation.mutate({
+        internIds: teamInternIds,
+        title: taskTitle.trim(),
+        detail: taskDetail.trim() || undefined,
+        deadline: taskDeadline,
+      });
+    } else {
+      assignSingleMutation.mutate({
+        internId: assignTarget.id,
+        title: taskTitle.trim(),
+        detail: taskDetail.trim() || undefined,
+        deadline: taskDeadline,
+      });
+    }
   };
+
+  const isAssigning = assignSingleMutation.isPending || assignManyMutation.isPending;
 
   return (
     <div className="space-y-8">
@@ -134,9 +154,7 @@ function MentorDashboard() {
           <h1 className="text-3xl font-semibold tracking-tight">
             Mentor <span className="text-gradient-primary">Dashboard</span>
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Review applicants and manage your team's tasks.
-          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">Review applicants and manage your team's tasks.</p>
           {team && (
             <div className={`mt-3 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ${team.bg} ${team.color} border ${team.border}`}>
               <span className={`h-2 w-2 rounded-full ${team.dot}`} />
@@ -144,11 +162,7 @@ function MentorDashboard() {
             </div>
           )}
         </div>
-        {/* ── Always-visible Assign Task button ── */}
-        <Button
-          className="btn-gradient h-10 rounded-full px-5 font-medium"
-          onClick={() => openDialog()}
-        >
+        <Button className="btn-gradient h-10 rounded-full px-5 font-medium" onClick={() => openDialog()}>
           <Plus className="mr-1 h-4 w-4" /> Assign Task
         </Button>
       </div>
@@ -157,23 +171,14 @@ function MentorDashboard() {
         <TabsList className="rounded-full bg-secondary/70 p-1">
           <TabsTrigger value="applicants" className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">
             Applicants
-            {applicants.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                {applicants.length}
-              </span>
-            )}
+            {applicants.length > 0 && <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">{applicants.length}</span>}
           </TabsTrigger>
           <TabsTrigger value="team" className="rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">
             My Team
-            {internProgress.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-secondary px-1.5 text-[10px] font-semibold text-muted-foreground">
-                {internProgress.length}
-              </span>
-            )}
+            {internProgress.length > 0 && <span className="ml-1.5 rounded-full bg-secondary px-1.5 text-[10px] font-semibold text-muted-foreground">{internProgress.length}</span>}
           </TabsTrigger>
         </TabsList>
 
-        {/* ── Applicants Tab ── */}
         <TabsContent value="applicants" className="mt-5">
           {loadingApplicants ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
@@ -219,7 +224,6 @@ function MentorDashboard() {
           )}
         </TabsContent>
 
-        {/* ── My Team Tab ── */}
         <TabsContent value="team" className="mt-5">
           {loadingProgress ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
@@ -227,26 +231,21 @@ function MentorDashboard() {
             </div>
           ) : (
             <Card className="overflow-hidden border-border/60 bg-card/80 shadow-[var(--shadow-soft)] backdrop-blur">
-              <InternTrackerTable
-                interns={internProgress}
-                onAssignTask={(intern) => openDialog(intern)}
-              />
+              <InternTrackerTable interns={internProgress} onAssignTask={(intern) => openDialog(intern)} />
             </Card>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* ── Assign Task Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              {assignTarget ? `Assign Task to ${assignTarget.name}` : "Assign Task"}
+              {assignTarget && assignTarget.id !== "ALL_TEAM_INTERNS" ? `Assign Task to ${assignTarget.name}` : "Assign Task"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Intern picker — show when no pre-selected intern */}
             {!assignTarget ? (
               <div className="space-y-1.5">
                 <Label>Select Intern <span className="text-destructive">*</span></Label>
@@ -257,14 +256,21 @@ function MentorDashboard() {
                 ) : (
                   <Select
                     onValueChange={(id) => {
-                      const intern = internProgress.find((i) => i.id === id);
-                      if (intern) setAssignTarget({ id: intern.id, name: intern.name });
+                      if (id === "ALL_TEAM_INTERNS") {
+                        setAssignTarget({ id: "ALL_TEAM_INTERNS", name: "All Team Members" });
+                      } else {
+                        const intern = internProgress.find((i) => i.id === id);
+                        if (intern) setAssignTarget({ id: intern.id, name: intern.name });
+                      }
                     }}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Choose an intern…" />
+                      <SelectValue placeholder="Choose an intern or all…" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="ALL_TEAM_INTERNS" className="font-semibold text-primary">
+                        ✨ Assign to ALL Team Members
+                      </SelectItem>
                       {internProgress.map((i) => (
                         <SelectItem key={i.id} value={i.id}>
                           <div className="flex flex-col">
@@ -278,57 +284,29 @@ function MentorDashboard() {
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+              <div className={`rounded-lg border px-3 py-2 text-sm ${assignTarget.id === "ALL_TEAM_INTERNS" ? "border-primary/40 bg-primary/10" : "border-primary/20 bg-primary/5"}`}>
                 Assigning to: <span className="font-semibold text-foreground">{assignTarget.name}</span>
-                <button className="ml-2 text-xs text-muted-foreground underline" onClick={() => setAssignTarget(null)}>
-                  change
-                </button>
+                <button className="ml-2 text-xs text-muted-foreground underline" onClick={() => setAssignTarget(null)}>change</button>
               </div>
             )}
 
             <div className="space-y-1.5">
               <Label>Task Title <span className="text-destructive">*</span></Label>
-              <Input
-                value={taskTitle}
-                onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="What should the intern work on?"
-                maxLength={200}
-              />
+              <Input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="What should they work on?" maxLength={200} />
             </div>
             <div className="space-y-1.5">
               <Label>Deadline <span className="text-destructive">*</span></Label>
-              <Input
-                type="date"
-                value={taskDeadline}
-                min={todayStr}
-                onChange={(e) => setTaskDeadline(e.target.value)}
-              />
+              <Input type="date" value={taskDeadline} min={todayStr} onChange={(e) => setTaskDeadline(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Details <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Textarea
-                value={taskDetail}
-                onChange={(e) => setTaskDetail(e.target.value)}
-                placeholder="Add instructions, resources, or notes…"
-                className="min-h-[100px]"
-                maxLength={2000}
-              />
+              <Textarea value={taskDetail} onChange={(e) => setTaskDetail(e.target.value)} placeholder="Add instructions, resources, or notes…" className="min-h-[100px]" maxLength={2000} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog} disabled={assignMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={submitAssign}
-              className="btn-gradient"
-              disabled={assignMutation.isPending || !assignTarget}
-            >
-              {assignMutation.isPending ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Assigning…</>
-              ) : (
-                <><Plus className="mr-1 h-4 w-4" /> Assign Task</>
-              )}
+            <Button variant="outline" onClick={closeDialog} disabled={isAssigning}>Cancel</Button>
+            <Button onClick={submitAssign} className="btn-gradient" disabled={isAssigning || !assignTarget}>
+              {isAssigning ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Assigning…</> : <><Plus className="mr-1 h-4 w-4" /> Assign Task</>}
             </Button>
           </DialogFooter>
         </DialogContent>

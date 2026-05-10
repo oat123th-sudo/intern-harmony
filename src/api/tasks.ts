@@ -138,6 +138,75 @@ export const assignTaskFn = createServerFn({ method: "POST" })
     };
   });
 
+// ─── Assign Task to Multiple Interns (Admin or Mentor) ────────────────────────
+const AssignTaskManySchema = z.object({
+  internIds: z.array(z.string().min(1, "Intern ID is required")).min(1, "At least one intern is required"),
+  title: z.string().min(1, "Title is required").max(200),
+  detail: z.string().max(2000).optional(),
+  deadline: z
+    .string()
+    .min(1, "Deadline is required")
+    .refine((s) => !isNaN(Date.parse(s)), { message: "Invalid deadline date" }),
+  assignedById: z.string().min(1, "Assigner ID is required"),
+});
+
+export const assignTaskManyFn = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => AssignTaskManySchema.parse(data))
+  .handler(async ({ data }) => {
+    if (!ObjectId.isValid(data.assignedById)) throw new Error("Unauthorized");
+    const validInternIds = data.internIds.filter((id) => ObjectId.isValid(id));
+    if (validInternIds.length === 0) throw new Error("No valid intern IDs provided");
+
+    const uc = await usersCol();
+
+    // 1. Verify assigner
+    const assigner = await uc.findOne(
+      { _id: new ObjectId(data.assignedById) },
+      { projection: { role: 1, team: 1 } }
+    );
+    if (!assigner || (assigner.role !== "admin" && assigner.role !== "mentor")) {
+      throw new Error("Unauthorized: only admin or mentor can assign tasks");
+    }
+
+    // 2. Fetch interns to verify they exist and are interns
+    const targetObjectIds = validInternIds.map((id) => new ObjectId(id));
+    const interns = await uc
+      .find({ _id: { $in: targetObjectIds }, role: "intern" }, { projection: { team: 1 } })
+      .toArray();
+
+    if (interns.length === 0) {
+      throw new Error("No valid interns found");
+    }
+
+    // 3. If mentor, verify ALL interns are in their team
+    if (assigner.role === "mentor") {
+      const allInTeam = interns.every((intern) => intern.team === assigner.team);
+      if (!allInTeam) {
+        throw new Error("You can only assign tasks to interns in your own team");
+      }
+    }
+
+    const col = await tasks();
+    const now = new Date();
+    const deadlineDate = new Date(data.deadline);
+    const timeOfDay = resolveTimeOfDay(now);
+
+    const docs: TaskDoc[] = interns.map((intern) => ({
+      title: data.title.trim(),
+      detail: data.detail?.trim() || undefined,
+      deadline: deadlineDate,
+      timeOfDay,
+      status: "todo",
+      userId: intern._id!.toString(),
+      assignedById: data.assignedById,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    await col.insertMany(docs);
+    return { success: true, count: docs.length };
+  });
+
 // ─── Update Task Status (intern can move own tasks) ───────────────────────────
 const UpdateStatusSchema = z.object({
   id: z.string().min(1),
